@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+{% load static %}
+<!-- saved from url=(0044)http://kenedict.com/networks/worldcup14/vis/ , thanks Andre!-->
+<html lang="en">
+  <head>
+    <meta http-equiv="content-type" content="text/html; charset=UTF8" />
+    <title>
+      Vis Network | Example Applications | Neighbourhood Highlighting
+    </title>
+
+    <script
+      type="text/javascript"
+      src="{% static 'netvis/vis-network.min.js' %}"
+    ></script>
+
+    <!--- <script src="{% static 'netvis/datasource.js' %}"></script> --->
+    <script>
+    var nodes = [
+    {% for node in nodes %}
+        {
+            id: {{ node.id }},
+            title: "Hostname: {{ node.hostname }}\nIPAddress: {{ node.ip_address }}\nCIDR: {{ node.cidr }}",
+            label: "{{ node.ip_address }}",
+            group: "group_{{ node.cidr }}",
+            blerg: "I like cheese!",
+            internal: "{{ node.is_local }}",
+            ipversion: "{{ node.ip_version }}",
+        },
+    {% endfor %}
+<!--
+    {% for node in legend_nodes %}
+        {
+           id: {{ node.id }},
+           x: {{ node.x }},
+           y: {{ node.y }},
+           title: "{{ node.title }}",
+           label: "{{ node.label }}",
+           group: "{{ node.group }}",
+           value: 1,
+           fixed: true,
+           physics: false,
+        },
+    {% endfor %}
+-->
+    ];
+    var edges = [
+    {% for edge in edges %}
+        { 
+            //from: {{ edge.src_ip_id }},
+            //to: {{ edge.dst_ip_id }}, 
+            title: "DSTPORT: {{ edge.dstport }}\nHit Count: {{ edge.total }}",
+            {% if edge.path == "RECEIVE" %}
+            from: {{ edge.dst_ip_id }},
+            to: {{ edge.src_ip_id }},
+            {% else %}
+            from: {{ edge.src_ip_id }},
+            to: {{ edge.dst_ip_id }},
+            {% endif %}
+            arrows: "to",
+            action: "{{ edge.action }}",
+            {% if edge.action == "ALLOW" %}
+            color: { color: "green" }, 
+            {% elif edge.action == "DROP" %}
+            color: { color: "red" },
+            {% else %}
+            color: { color: "grey" },
+            {% endif %}
+            dashes: false, 
+            background: {
+                            enabled: true, 
+                            {% if edge.action == "ALLOW" %}
+                            color: "green", 
+                            {% elif edge.action == "DROP" %}
+                            color: "red",
+                            {% else %}
+                            color: "grey",
+                            {% endif %}
+                            //size: {{ edge.total }},
+                            size: 1
+                        }, 
+        },
+    {% endfor %}
+    ];
+    </script>
+
+    <style type="text/css">
+      #mynetwork {
+        width: {{area_width}}px;
+        height: {{area_height}}px;
+        border: 1px solid lightgray;
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+        "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+        "Helvetica Nueu", sans-serif;
+        -webkit-font-smoothing: antialized;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      code {
+        font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New",
+        monospace;
+      }
+    </style>
+  </head>
+
+  <body>
+    <h2>Dynamic Data - Neighbourhood Highlight</h2>
+      <br /><br />
+      <label>
+        Filter nodes
+        <select id="nodeFilterSelect">
+          <option value="">All Address Space</option>
+          <option value="Private">Private</option>
+          <option value="Public">Public</option>
+        </select>
+      </label>
+      <br /><br />
+      <label>
+        Filter edges
+        <div>
+          <label>
+            <input type="checkbox" name="edgesFilter" value="Allow" checked/>
+            <span style="color: green">Allowed</span> traffic
+          </label>
+        </div>
+        <div>
+          <label>
+            <input type="checkbox" name="edgesFilter" value="Deny" checked/>
+            <span style="color: red">Denied</span> traffic
+          </label>
+        </div>
+      </label>
+      <br /><br />
+      Number of visits: {{ num_visits }}
+      <br /><br />
+      <form action="{% url 'index' %}" method="post">
+      {% csrf_token %}
+      {{ form }}
+      <input type="submit" value="Test Booton">
+      </form>
+      <br /><br />
+    </div>
+
+    <div id="mynetwork"></div>
+
+    <script type="text/javascript">
+      const nodeFilterSelector = document.getElementById("nodeFilterSelect");
+      const edgeFilters = document.getElementsByName("edgesFilter");
+
+      function startNetwork(data) {
+        const container = document.getElementById("mynetwork");
+        const options = {};
+        new vis.Network(container, data, options);
+      }
+
+      /**
+       * In this example we do not mutate nodes or edges source data.
+       */
+      var nodes = new vis.DataSet(nodes); // these come from WorldCup2014.js
+      var edges = new vis.DataSet(edges); // these come from WorldCup2014.js
+	  
+      /**
+       * filter values are updated in the outer scope.
+       * in order to apply filters to new values, DataView.refresh() should be called
+       */
+      let nodeFilterValue = "";
+      /*
+      filter function should return true or false
+      based on whether item in DataView satisfies a given condition.
+    */
+      const nodesFilter = (node) => {
+        if (nodeFilterValue === "") {
+          return true;
+        }
+        switch (nodeFilterValue) {
+          case "Private":
+            return node.internal == "True";
+          case "Public":
+            return node.internal == "False";
+          default:
+            return true;
+        }
+      };
+
+      const edgesFilterValues = {
+       Allow: true,
+       Deny: true,
+      };
+      const edgesFilter = (edge) => {
+        if (edgesFilterValues['Allow'] === true && edgesFilterValues['Deny'] === true)
+			{return edge}
+		else if (edgesFilterValues['Allow'] === true)
+			{return edge.action == 'ALLOW'}
+		else if (edgesFilterValues['Deny'] === true)
+			{return edge.action == 'DROP'}
+		else
+			{return ''}
+      };
+
+	  /* 
+	  testnode = new vis.DataView(nodes, { filter: nodesFilter });
+	  testnode.get()
+	  */
+      const nodesView = new vis.DataView(nodes, { filter: nodesFilter });
+	  /* 
+	  testedge = new vis.DataView(edges, { filter: edgesFilter });
+	  testedge.get()
+	  */
+      const edgesView = new vis.DataView(edges, { filter: edgesFilter });
+
+      nodeFilterSelector.addEventListener("change", (e) => {
+        // set new value to filter variable
+        nodeFilterValue = e.target.value;
+        /*
+        refresh DataView,
+        so that its filter function is re-calculated with the new variable
+      */
+        nodesView.refresh();
+      });
+
+      edgeFilters.forEach((filter) =>
+        filter.addEventListener("change", (e) => {
+          const { value, checked } = e.target;
+          edgesFilterValues[value] = checked;
+          edgesView.refresh();
+        })
+      );
+
+      startNetwork({ nodes: nodesView, edges: edgesView });
+    </script>
+  </body>
+</html>
